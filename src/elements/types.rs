@@ -104,7 +104,7 @@ impl Deserialize for RefType {
 	fn deserialize<R: io::Read>(reader: &mut R) -> Result<Self, Self::Error> {
 		let val = VarInt7::deserialize(reader)?;
 		RefType::from_bits(val.into())
-			.ok_or(Error::UnknownTableElementType(val.into()))
+			.ok_or(Error::UnknownValueType(val.into()))
 	}
 }
 
@@ -200,11 +200,13 @@ impl Deserialize for BlockType {
 
 	fn deserialize<R: io::Read>(reader: &mut R) -> Result<Self, Self::Error> {
 		let val = VarInt7::deserialize(reader)?;
-
-		match val.into() {
-			-0x40 => Ok(BlockType::NoResult),
-			_ => Err(Error::UnknownValueType(val.into())),
+		let bits = val.into();
+		match bits {
+			-0x40 => Some(BlockType::NoResult),
+			_ => None,
 		}
+		.or(ValueType::from_bits(bits).map(BlockType::Value))
+		.ok_or(Error::UnknownValueType(val.into()))
 	}
 }
 
