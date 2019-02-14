@@ -2,7 +2,7 @@ use crate::rust::string::String;
 use crate::io;
 use super::{
 	Deserialize, Serialize, Error, VarUint7, VarInt7, VarUint32, VarUint1, Uint8,
-	ValueType, TableElementType
+	ValueType, RefType
 };
 
 const FLAG_HAS_MAX: u8 = 0x01;
@@ -57,7 +57,7 @@ impl Serialize for GlobalType {
 /// Table entry
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct TableType {
-	elem_type: TableElementType,
+	elem_type: RefType,
 	limits: ResizableLimits,
 }
 
@@ -65,7 +65,7 @@ impl TableType {
 	/// New table definition
 	pub fn new(min: u32, max: Option<u32>) -> Self {
 		TableType {
-			elem_type: TableElementType::AnyFunc,
+			elem_type: RefType::AnyFunc,
 			limits: ResizableLimits::new(min, max),
 		}
 	}
@@ -74,14 +74,14 @@ impl TableType {
 	pub fn limits(&self) -> &ResizableLimits { &self.limits }
 
 	/// Table element type
-	pub fn elem_type(&self) -> TableElementType { self.elem_type }
+	pub fn elem_type(&self) -> RefType { self.elem_type }
 }
 
 impl Deserialize for TableType {
 	type Error = Error;
 
 	fn deserialize<R: io::Read>(reader: &mut R) -> Result<Self, Self::Error> {
-		let elem_type = TableElementType::deserialize(reader)?;
+		let elem_type = RefType::deserialize(reader)?;
 		let limits = ResizableLimits::deserialize(reader)?;
 		Ok(TableType {
 			elem_type: elem_type,

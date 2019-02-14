@@ -821,7 +821,7 @@ impl Serialize for DataSection {
 mod tests {
 
 	use super::super::{
-		deserialize_buffer, deserialize_file, ValueType, InitExpr, DataSegment,
+		deserialize_buffer, deserialize_file, NumType, InitExpr, DataSegment,
 		serialize, ElementSegment, Instructions, BlockType, Local, FuncBody,
 	};
 	use super::{Section, TypeSection, Type, DataSection, ElementSection, CodeSection};
@@ -950,7 +950,7 @@ mod tests {
 			&Type::Function(ref func_type) => func_type
 		};
 
-		assert_eq!(Some(ValueType::I64), t1.return_type());
+		assert_eq!(Some(NumType::I64.into()), t1.return_type());
 		assert_eq!(2, t1.params().len());
 	}
 
@@ -1111,9 +1111,9 @@ mod tests {
 		let code_section = CodeSection::with_bodies(
 			vec![
 				FuncBody::new(
-					vec![Local::new(1, ValueType::I32)],
+					vec![Local::new(1, NumType::I32)],
 					Instructions::new(vec![
-						Block(BlockType::Value(ValueType::I32)),
+						Block(BlockType::Value(NumType::I32.into())),
 						GetGlobal(0),
 						End,
 						End,

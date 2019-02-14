@@ -33,6 +33,94 @@ impl Serialize for Type {
 /// Value type.
 #[derive(Clone, Copy, Debug, PartialEq, Hash, Eq)]
 pub enum ValueType {
+	/// Number type
+	Num(NumType),
+	/// Reference type
+	Ref(RefType),
+	/// 128-bit SIMD register
+	V128,
+}
+
+impl From<RefType> for ValueType {
+	fn from(r: RefType) -> ValueType {
+		ValueType::Ref(r)
+	}
+}
+
+impl From<NumType> for ValueType {
+	fn from(n: NumType) -> ValueType {
+		ValueType::Num(n)
+	}
+}
+
+impl ValueType {
+	fn from_bits(x: i8) -> Option<ValueType> {
+		match x {
+			-0x05 => Some(ValueType::V128),
+			_ => None,
+		}
+		.or(NumType::from_bits(x).map(Into::into))
+		.or(RefType::from_bits(x).map(Into::into))
+	}
+
+	fn to_bits(self) -> i8 {
+		match self {
+			ValueType::V128 => -0x05,
+			ValueType::Num(n) => n.to_bits(),
+			ValueType::Ref(r) => r.to_bits(),
+		}
+	}
+}
+
+/// Reference type.
+#[derive(Clone, Copy, Debug, PartialEq, Hash, Eq)]
+pub enum RefType {
+	/// Infinite union of all references
+	AnyRef,
+	/// Infinite union of all references to functions
+	AnyFunc,
+}
+
+impl RefType {
+	fn from_bits(x: i8) -> Option<RefType> {
+		match x {
+			-0x10 => Some(RefType::AnyFunc),
+			-0x11 => Some(RefType::AnyRef),
+			_ => None,
+		}
+	}
+
+	fn to_bits(self) -> i8 {
+		match self {
+			RefType::AnyFunc => -0x10,
+			RefType::AnyRef => -0x11,
+		}
+	}
+}
+
+impl Deserialize for RefType {
+	type Error = Error;
+
+	fn deserialize<R: io::Read>(reader: &mut R) -> Result<Self, Self::Error> {
+		let val = VarInt7::deserialize(reader)?;
+		RefType::from_bits(val.into())
+			.ok_or(Error::UnknownTableElementType(val.into()))
+	}
+}
+
+impl Serialize for RefType {
+	type Error = Error;
+
+	fn serialize<W: io::Write>(self, writer: &mut W) -> Result<(), Self::Error> {
+		let val: VarInt7 = self.to_bits().into();
+		val.serialize(writer)?;
+		Ok(())
+	}
+}
+
+/// Number type.
+#[derive(Clone, Copy, Debug, PartialEq, Hash, Eq)]
+pub enum NumType {
 	/// 32-bit signed integer
 	I32,
 	/// 64-bit signed integer
@@ -41,8 +129,27 @@ pub enum ValueType {
 	F32,
 	/// 64-bit float
 	F64,
-	/// 128-bit SIMD register
-	V128,
+}
+
+impl NumType {
+	fn from_bits(x: i8) -> Option<NumType> {
+		match x {
+			-0x01 => Some(NumType::I32),
+			-0x02 => Some(NumType::I64),
+			-0x03 => Some(NumType::F32),
+			-0x04 => Some(NumType::F64),
+			_ => None,
+		}
+	}
+
+	fn to_bits(self) -> i8 {
+		match self {
+			NumType::I32 => -0x01,
+			NumType::I64 => -0x02,
+			NumType::F32 => -0x03,
+			NumType::F64 => -0x04,
+		}
+	}
 }
 
 impl Deserialize for ValueType {
@@ -50,15 +157,8 @@ impl Deserialize for ValueType {
 
 	fn deserialize<R: io::Read>(reader: &mut R) -> Result<Self, Self::Error> {
 		let val = VarInt7::deserialize(reader)?;
-
-		match val.into() {
-			-0x01 => Ok(ValueType::I32),
-			-0x02 => Ok(ValueType::I64),
-			-0x03 => Ok(ValueType::F32),
-			-0x04 => Ok(ValueType::F64),
-			-0x05 => Ok(ValueType::V128),
-			_ => Err(Error::UnknownValueType(val.into())),
-		}
+		ValueType::from_bits(val.into())
+			.ok_or(Error::UnknownValueType(val.into()))
 	}
 }
 
@@ -66,13 +166,7 @@ impl Serialize for ValueType {
 	type Error = Error;
 
 	fn serialize<W: io::Write>(self, writer: &mut W) -> Result<(), Self::Error> {
-		let val: VarInt7 = match self {
-			ValueType::I32 => -0x01,
-			ValueType::I64 => -0x02,
-			ValueType::F32 => -0x03,
-			ValueType::F64 => -0x04,
-			ValueType::V128 => -0x05,
-		}.into();
+		let val: VarInt7 = self.to_bits().into();
 		val.serialize(writer)?;
 		Ok(())
 	}
@@ -81,10 +175,12 @@ impl Serialize for ValueType {
 impl fmt::Display for ValueType {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match *self {
-			ValueType::I32 => write!(f, "i32"),
-			ValueType::I64 => write!(f, "i64"),
-			ValueType::F32 => write!(f, "f32"),
-			ValueType::F64 => write!(f, "f64"),
+			ValueType::Num(NumType::I32) => write!(f, "i32"),
+			ValueType::Num(NumType::I64) => write!(f, "i64"),
+			ValueType::Num(NumType::F32) => write!(f, "f32"),
+			ValueType::Num(NumType::F64) => write!(f, "f64"),
+			ValueType::Ref(RefType::AnyRef) => write!(f, "anyref"),
+			ValueType::Ref(RefType::AnyFunc) => write!(f, "anyfunc"),
 			ValueType::V128 => write!(f, "v128"),
 		}
 	}
@@ -106,11 +202,6 @@ impl Deserialize for BlockType {
 		let val = VarInt7::deserialize(reader)?;
 
 		match val.into() {
-			-0x01 => Ok(BlockType::Value(ValueType::I32)),
-			-0x02 => Ok(BlockType::Value(ValueType::I64)),
-			-0x03 => Ok(BlockType::Value(ValueType::F32)),
-			-0x04 => Ok(BlockType::Value(ValueType::F64)),
-			0x7b => Ok(BlockType::Value(ValueType::V128)),
 			-0x40 => Ok(BlockType::NoResult),
 			_ => Err(Error::UnknownValueType(val.into())),
 		}
@@ -123,11 +214,7 @@ impl Serialize for BlockType {
 	fn serialize<W: io::Write>(self, writer: &mut W) -> Result<(), Self::Error> {
 		let val: VarInt7 = match self {
 			BlockType::NoResult => -0x40i8,
-			BlockType::Value(ValueType::I32) => -0x01,
-			BlockType::Value(ValueType::I64) => -0x02,
-			BlockType::Value(ValueType::F32) => -0x03,
-			BlockType::Value(ValueType::F64) => -0x04,
-			BlockType::Value(ValueType::V128) => 0x7b,
+			BlockType::Value(v) => v.to_bits(),
 		}.into();
 		val.serialize(writer)?;
 		Ok(())
@@ -227,34 +314,3 @@ impl Serialize for FunctionType {
 	}
 }
 
-/// Table element type.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum TableElementType {
-	/// A reference to a function with any signature.
-	AnyFunc,
-}
-
-impl Deserialize for TableElementType {
-	type Error = Error;
-
-	fn deserialize<R: io::Read>(reader: &mut R) -> Result<Self, Self::Error> {
-		let val = VarInt7::deserialize(reader)?;
-
-		match val.into() {
-			-0x10 => Ok(TableElementType::AnyFunc),
-			_ => Err(Error::UnknownTableElementType(val.into())),
-		}
-	}
-}
-
-impl Serialize for TableElementType {
-	type Error = Error;
-
-	fn serialize<W: io::Write>(self, writer: &mut W) -> Result<(), Self::Error> {
-		let val: VarInt7 = match self {
-			TableElementType::AnyFunc => -0x10,
-		}.into();
-		val.serialize(writer)?;
-		Ok(())
-	}
-}

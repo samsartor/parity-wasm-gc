@@ -34,8 +34,8 @@ impl<F> SignatureBuilder<F> where F: Invoke<elements::FunctionType> {
 	}
 
 	/// Add argument to signature builder
-	pub fn with_param(mut self, value_type: elements::ValueType) -> Self {
-		self.signature.params_mut().push(value_type);
+	pub fn with_param(mut self, value_type: impl Into<elements::ValueType>) -> Self {
+		self.signature.params_mut().push(value_type.into());
 		self
 	}
 

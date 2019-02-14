@@ -25,7 +25,7 @@ impl<F> GlobalBuilder<F> {
 	pub fn with_callback(callback: F) -> Self {
 		GlobalBuilder {
 			callback: callback,
-			value_type: elements::ValueType::I32,
+			value_type: elements::NumType::I32.into(),
 			init_expr: elements::InitExpr::empty(),
 			is_mutable: false,
 		}
@@ -87,7 +87,7 @@ mod tests {
 	#[test]
 	fn example() {
 		let entry = global().value_type().i32().build();
-		assert_eq!(entry.global_type().content_type(), elements::ValueType::I32);
+		assert_eq!(entry.global_type().content_type(), elements::NumType::I32.into());
 		assert_eq!(entry.global_type().is_mutable(), false);
 	}
 }

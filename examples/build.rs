@@ -30,7 +30,7 @@ fn main() {
 			// We describe signature for the function via signature()
 			// function. In our simple example it's just one input
 			// argument of type 'i32' without return value
-			.signature().with_param(elements::ValueType::I32).build()
+			.signature().with_param(elements::NumType::I32).build()
 			// body() without any further arguments means that the body
 			// of the function will be empty
 			.body().build()

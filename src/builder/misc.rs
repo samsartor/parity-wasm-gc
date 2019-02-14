@@ -12,19 +12,19 @@ impl<F> ValueTypeBuilder<F> where F: Invoke<elements::ValueType> {
 	}
 
 	pub fn i32(self) -> F::Result {
-		self.callback.invoke(elements::ValueType::I32)
+		self.callback.invoke(elements::NumType::I32.into())
 	}
 
 	pub fn i64(self) -> F::Result {
-		self.callback.invoke(elements::ValueType::I64)
+		self.callback.invoke(elements::NumType::I64.into())
 	}
 
 	pub fn f32(self) -> F::Result {
-		self.callback.invoke(elements::ValueType::F32)
+		self.callback.invoke(elements::NumType::F32.into())
 	}
 
 	pub fn f64(self) -> F::Result {
-		self.callback.invoke(elements::ValueType::F64)
+		self.callback.invoke(elements::NumType::F64.into())
 	}
 }
 
@@ -38,19 +38,19 @@ impl<F> OptionalValueTypeBuilder<F> where F: Invoke<Option<elements::ValueType>>
 	}
 
 	pub fn i32(self) -> F::Result {
-		self.callback.invoke(Some(elements::ValueType::I32))
+		self.callback.invoke(Some(elements::NumType::I32.into()))
 	}
 
 	pub fn i64(self) -> F::Result {
-		self.callback.invoke(Some(elements::ValueType::I64))
+		self.callback.invoke(Some(elements::NumType::I64.into()))
 	}
 
 	pub fn f32(self) -> F::Result {
-		self.callback.invoke(Some(elements::ValueType::F32))
+		self.callback.invoke(Some(elements::NumType::F32.into()))
 	}
 
 	pub fn f64(self) -> F::Result {
-		self.callback.invoke(Some(elements::ValueType::F64))
+		self.callback.invoke(Some(elements::NumType::F64.into()))
 	}
 }
 
@@ -68,22 +68,22 @@ impl<F> ValueTypesBuilder<F> where F: Invoke<Vec<elements::ValueType>> {
 	}
 
 	pub fn i32(mut self) -> Self {
-		self.value_types.push(elements::ValueType::I32);
+		self.value_types.push(elements::NumType::I32.into());
 		self
 	}
 
 	pub fn i64(mut self) -> Self {
-		self.value_types.push(elements::ValueType::I64);
+		self.value_types.push(elements::NumType::I64.into());
 		self
 	}
 
 	pub fn f32(mut self) -> Self {
-		self.value_types.push(elements::ValueType::F32);
+		self.value_types.push(elements::NumType::F32.into());
 		self
 	}
 
 	pub fn f64(mut self) -> Self {
-		self.value_types.push(elements::ValueType::F64);
+		self.value_types.push(elements::NumType::F64.into());
 		self
 	}
 

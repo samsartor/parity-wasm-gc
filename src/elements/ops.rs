@@ -120,6 +120,9 @@ pub enum Instruction {
 	Call(u32),
 	CallIndirect(u32, u8),
 
+	RefNull,
+	RefIsNull,
+
 	Drop,
 	Select,
 
@@ -128,6 +131,8 @@ pub enum Instruction {
 	TeeLocal(u32),
 	GetGlobal(u32),
 	SetGlobal(u32),
+	GetTable(u32),
+	SetTable(u32),
 
 	// All store/load instructions operate with 'memory immediates'
 	// which represented here as (flag, offset) tuple
@@ -586,6 +591,8 @@ pub mod opcodes {
 	pub const RETURN: u8 = 0x0f;
 	pub const CALL: u8 = 0x10;
 	pub const CALLINDIRECT: u8 = 0x11;
+	pub const REFNULL: u8 = 0xD0;
+	pub const REFISNULL: u8 = 0xD1;
 	pub const DROP: u8 = 0x1a;
 	pub const SELECT: u8 = 0x1b;
 	pub const GETLOCAL: u8 = 0x20;
@@ -593,6 +600,8 @@ pub mod opcodes {
 	pub const TEELOCAL: u8 = 0x22;
 	pub const GETGLOBAL: u8 = 0x23;
 	pub const SETGLOBAL: u8 = 0x24;
+	pub const GETTABLE: u8 = 0x25;
+	pub const SETTABLE: u8 = 0x26;
 	pub const I32LOAD: u8 = 0x28;
 	pub const I64LOAD: u8 = 0x29;
 	pub const F32LOAD: u8 = 0x2a;
@@ -1052,6 +1061,10 @@ impl Deserialize for Instruction {
 						table_ref,
 					)
 				},
+
+				REFNULL => RefNull,
+				REFISNULL => RefIsNull,
+
 				DROP => Drop,
 				SELECT => Select,
 
@@ -1060,6 +1073,8 @@ impl Deserialize for Instruction {
 				TEELOCAL => TeeLocal(VarUint32::deserialize(reader)?.into()),
 				GETGLOBAL => GetGlobal(VarUint32::deserialize(reader)?.into()),
 				SETGLOBAL => SetGlobal(VarUint32::deserialize(reader)?.into()),
+				GETTABLE => GetTable(VarUint32::deserialize(reader)?.into()),
+				SETTABLE => SetTable(VarUint32::deserialize(reader)?.into()),
 
 				I32LOAD => I32Load(
 					VarUint32::deserialize(reader)?.into(),
@@ -1698,6 +1713,8 @@ impl Serialize for Instruction {
 				VarUint32::from(index).serialize(writer)?;
 				Uint8::from(reserved).serialize(writer)?;
 			}),
+			RefNull => op!(writer, REFNULL),
+			RefIsNull => op!(writer, REFISNULL),
 			Drop => op!(writer, DROP),
 			Select => op!(writer, SELECT),
 			GetLocal(index) => op!(writer, GETLOCAL, {
@@ -1713,6 +1730,12 @@ impl Serialize for Instruction {
 				VarUint32::from(index).serialize(writer)?;
 			}),
 			SetGlobal(index) => op!(writer, SETGLOBAL, {
+				VarUint32::from(index).serialize(writer)?;
+			}),
+			GetTable(index) => op!(writer, GETTABLE, {
+				VarUint32::from(index).serialize(writer)?;
+			}),
+			SetTable(index) => op!(writer, SETTABLE, {
 				VarUint32::from(index).serialize(writer)?;
 			}),
 			I32Load(flags, offset) => op!(writer, I32LOAD, {
@@ -2252,6 +2275,8 @@ impl fmt::Display for Instruction {
 			Return => fmt_op!(f, "return"),
 			Call(index) => fmt_op!(f, "call", index),
 			CallIndirect(index, _) =>  fmt_op!(f, "call_indirect", index),
+			RefNull => fmt_op!(f, "ref.null"),
+			RefIsNull => fmt_op!(f, "ref.isnull"),
 			Drop => fmt_op!(f, "drop"),
 			Select => fmt_op!(f, "select"),
 			GetLocal(index) => fmt_op!(f, "get_local", index),
@@ -2259,6 +2284,8 @@ impl fmt::Display for Instruction {
 			TeeLocal(index) => fmt_op!(f, "tee_local", index),
 			GetGlobal(index) => fmt_op!(f, "get_global", index),
 			SetGlobal(index) => fmt_op!(f, "set_global", index),
+			GetTable(index) => fmt_op!(f, "get_table", index),
+			SetTable(index) => fmt_op!(f, "set_table", index),
 
 			I32Load(_, 0) => write!(f, "i32.load"),
 			I32Load(_, offset) => write!(f, "i32.load offset={}", offset),
@@ -2782,9 +2809,9 @@ fn size_off() {
 #[test]
 fn instructions_hashset() {
 	use self::Instruction::{Call, Block, Drop};
-	use super::types::{BlockType::Value, ValueType};
+	use super::types::{BlockType::Value, NumType};
 
 	let set: std::collections::HashSet<Instruction> =
-		vec![Call(1), Block(Value(ValueType::I32)), Drop].into_iter().collect();
+		vec![Call(1), Block(Value(NumType::I32.into())), Drop].into_iter().collect();
 	assert_eq!(set.contains(&Drop), true)
 }

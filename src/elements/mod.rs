@@ -47,7 +47,7 @@ pub use self::primitives::{
 	VarUint32, VarUint7, Uint8, VarUint1, VarInt7, Uint32, VarInt32, VarInt64,
 	Uint64, VarUint64, CountedList, CountedWriter, CountedListWriter,
 };
-pub use self::types::{Type, ValueType, BlockType, FunctionType, TableElementType};
+pub use self::types::{Type, ValueType, BlockType, FunctionType, NumType, RefType};
 pub use self::ops::{Instruction, Instructions, InitExpr, opcodes, MemArg, BrTableData};
 pub use self::func::{Func, FuncBody, Local};
 pub use self::segment::{ElementSegment, DataSegment};

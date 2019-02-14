@@ -49,8 +49,8 @@ pub struct Local {
 
 impl Local {
 	/// New local with `count` and `value_type`.
-	pub fn new(count: u32, value_type: ValueType) -> Self {
-		Local { count: count, value_type: value_type }
+	pub fn new(count: u32, value_type: impl Into<ValueType>) -> Self {
+		Local { count: count, value_type: value_type.into() }
 	}
 
 	/// Number of locals with the shared type.
