@@ -1,9 +1,24 @@
 use crate::rust::{fmt, vec::Vec};
 use crate::io;
 use super::{
-	Deserialize, Serialize, Error, VarUint7, VarInt7, VarUint1, CountedList,
+	Deserialize, Serialize, Error, VarInt7, VarUint1, CountedList,
 	CountedListWriter, VarUint32,
 };
+
+const I32TYPE: i8 = -0x01;
+const I64TYPE: i8 = -0x02;
+const F32TYPE: i8 = -0x03;
+const F64TYPE: i8 = -0x04;
+const V128TYPE: i8 = -0x05;
+const ANYFUNCTYPE: i8 = -0x10;
+const ANYREFTYPE: i8 = -0x11;
+const REFTYPE: i8 = -0x12;
+const PACKEDI8TYPE: i8 = -0x18;
+const PACKEDI16TYPE: i8 = -0x19;
+const FUNCTIONTYPE: i8 = -0x20;
+const STRUCTTYPE: i8 = -0x21;
+const ARRAYTYPE: i8 = -0x22;
+const NORESULTTYPE: i8 = -0x40;
 
 /// Type definition in types section. Currently can be only of the function type.
 #[derive(Debug, Clone, PartialEq, Hash, Eq)]
@@ -16,12 +31,29 @@ pub enum Type {
 	Array(ArrayType),
 }
 
+impl From<FunctionType> for Type {
+	fn from(x: FunctionType) -> Type { Type::Function(x) }
+}
+
+impl From<StructType> for Type {
+	fn from(x: StructType) -> Type { Type::Struct(x) }
+}
+
+impl From<ArrayType> for Type {
+	fn from(x: ArrayType) -> Type { Type::Array(x) }
+}
+
 impl Deserialize for Type {
 	type Error = Error;
 
 	fn deserialize<R: io::Read>(reader: &mut R) -> Result<Self, Self::Error> {
-		// TODO: struct, array
-		Ok(Type::Function(FunctionType::deserialize(reader)?))
+		let val = VarInt7::deserialize(reader)?.into();
+		match val {
+			FUNCTIONTYPE => FunctionType::deserialize(reader).map(Into::into),
+			STRUCTTYPE => StructType::deserialize(reader).map(Into::into),
+			ARRAYTYPE => ArrayType::deserialize(reader).map(Into::into),
+			_ => Err(Error::UnknownValueType(val.into())),
+		}
 	}
 }
 
@@ -30,9 +62,18 @@ impl Serialize for Type {
 
 	fn serialize<W: io::Write>(self, writer: &mut W) -> Result<(), Self::Error> {
 		match self {
-			Type::Function(fn_type) => fn_type.serialize(writer),
-			Type::Struct(_) => unimplemented!(),
-			Type::Array(_) => unimplemented!(),
+			Type::Function(fn_type) => {
+				VarInt7::from(FUNCTIONTYPE).serialize(writer)?;
+				fn_type.serialize(writer)
+			},
+			Type::Struct(stuct_type) => {
+				VarInt7::from(STRUCTTYPE).serialize(writer)?;
+				stuct_type.serialize(writer)
+			},
+			Type::Array(arr_type) => {
+				VarInt7::from(ARRAYTYPE).serialize(writer)?;
+				arr_type.serialize(writer)
+			},
 		}
 	}
 }
@@ -63,7 +104,7 @@ impl From<NumType> for ValueType {
 impl ValueType {
 	fn from_bits(x: i8) -> Option<ValueType> {
 		match x {
-			-0x05 => Some(ValueType::V128),
+			V128TYPE => Some(ValueType::V128),
 			_ => None,
 		}
 		.or(NumType::from_bits(x).map(Into::into))
@@ -72,7 +113,7 @@ impl ValueType {
 
 	fn to_bits(self) -> i8 {
 		match self {
-			ValueType::V128 => -0x05,
+			ValueType::V128 => V128TYPE,
 			ValueType::Num(n) => n.to_bits(),
 			ValueType::Ref(r) => r.to_bits(),
 		}
@@ -107,18 +148,18 @@ pub enum RefType {
 impl RefType {
 	fn from_bits(x: i8) -> Option<RefType> {
 		match x {
-			-0x10 => Some(RefType::AnyFunc),
-			-0x11 => Some(RefType::AnyRef),
-			-0x12 => Some(RefType::Ref(0)),
+			ANYFUNCTYPE => Some(RefType::AnyFunc),
+			ANYREFTYPE => Some(RefType::AnyRef),
+			REFTYPE => Some(RefType::Ref(0)),
 			_ => None,
 		}
 	}
 
 	fn to_bits(self) -> i8 {
 		match self {
-			RefType::AnyFunc => -0x10,
-			RefType::AnyRef => -0x11,
-			RefType::Ref(_) => -0x12,
+			RefType::AnyFunc => ANYFUNCTYPE,
+			RefType::AnyRef => ANYREFTYPE,
+			RefType::Ref(_) => REFTYPE,
 		}
 	}
 
@@ -143,9 +184,9 @@ impl Deserialize for RefType {
 
 	fn deserialize<R: io::Read>(reader: &mut R) -> Result<Self, Self::Error> {
 		let val = VarInt7::deserialize(reader)?;
-		let item = RefType::from_bits(val.into())
+		let mut item = RefType::from_bits(val.into())
 			.ok_or(Error::UnknownValueType(val.into()))?;
-		item.read_rest(reader);
+		item.read_rest(reader)?;
 		Ok(item)
 	}
 }
@@ -177,20 +218,20 @@ pub enum NumType {
 impl NumType {
 	fn from_bits(x: i8) -> Option<NumType> {
 		match x {
-			-0x01 => Some(NumType::I32),
-			-0x02 => Some(NumType::I64),
-			-0x03 => Some(NumType::F32),
-			-0x04 => Some(NumType::F64),
+			I32TYPE => Some(NumType::I32),
+			I64TYPE => Some(NumType::I64),
+			F32TYPE => Some(NumType::F32),
+			F64TYPE => Some(NumType::F64),
 			_ => None,
 		}
 	}
 
 	fn to_bits(self) -> i8 {
 		match self {
-			NumType::I32 => -0x01,
-			NumType::I64 => -0x02,
-			NumType::F32 => -0x03,
-			NumType::F64 => -0x04,
+			NumType::I32 => I32TYPE,
+			NumType::I64 => I64TYPE,
+			NumType::F32 => F32TYPE,
+			NumType::F64 => F64TYPE,
 		}
 	}
 }
@@ -200,7 +241,7 @@ impl Deserialize for ValueType {
 
 	fn deserialize<R: io::Read>(reader: &mut R) -> Result<Self, Self::Error> {
 		let val = VarInt7::deserialize(reader)?;
-		let item = ValueType::from_bits(val.into())
+		let mut item = ValueType::from_bits(val.into())
 			.ok_or(Error::UnknownValueType(val.into()))?;
 		item.read_rest(reader)?;
 		Ok(item)
@@ -249,7 +290,7 @@ impl Deserialize for BlockType {
 		let val = VarInt7::deserialize(reader)?;
 		let bits = val.into();
 		match bits {
-			-0x40 => Some(BlockType::NoResult),
+			NORESULTTYPE => Some(BlockType::NoResult),
 			_ => None,
 		}
 		.or(ValueType::from_bits(bits).map(BlockType::Value))
@@ -262,7 +303,7 @@ impl Serialize for BlockType {
 
 	fn serialize<W: io::Write>(self, writer: &mut W) -> Result<(), Self::Error> {
 		let val: VarInt7 = match self {
-			BlockType::NoResult => -0x40i8,
+			BlockType::NoResult => NORESULTTYPE,
 			BlockType::Value(v) => v.to_bits(),
 		}.into();
 		val.serialize(writer)?;
@@ -273,7 +314,6 @@ impl Serialize for BlockType {
 /// Function signature type.
 #[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub struct FunctionType {
-	form: u8,
 	params: Vec<ValueType>,
 	return_type: Option<ValueType>,
 }
@@ -281,7 +321,6 @@ pub struct FunctionType {
 impl Default for FunctionType {
 	fn default() -> Self {
 		FunctionType {
-			form: 0x60,
 			params: Vec::new(),
 			return_type: None,
 		}
@@ -297,8 +336,6 @@ impl FunctionType {
 			..Default::default()
 		}
 	}
-	/// Function form (currently only valid value is `0x60`)
-	pub fn form(&self) -> u8 { self.form }
 	/// Parameters in the function signature.
 	pub fn params(&self) -> &[ValueType] { &self.params }
 	/// Mutable parameters in the function signature.
@@ -313,14 +350,7 @@ impl Deserialize for FunctionType {
 	type Error = Error;
 
 	fn deserialize<R: io::Read>(reader: &mut R) -> Result<Self, Self::Error> {
-		let form: u8 = VarUint7::deserialize(reader)?.into();
-
-		if form != 0x60 {
-			return Err(Error::UnknownFunctionForm(form));
-		}
-
 		let params: Vec<ValueType> = CountedList::deserialize(reader)?.into_inner();
-
 		let return_types: u32 = VarUint32::deserialize(reader)?.into();
 
 		let return_type = if return_types == 1 {
@@ -332,7 +362,6 @@ impl Deserialize for FunctionType {
 		};
 
 		Ok(FunctionType {
-			form: form,
 			params: params,
 			return_type: return_type,
 		})
@@ -343,8 +372,6 @@ impl Serialize for FunctionType {
 	type Error = Error;
 
 	fn serialize<W: io::Write>(self, writer: &mut W) -> Result<(), Self::Error> {
-		VarUint7::from(self.form).serialize(writer)?;
-
 		let data = self.params;
 		let counted_list = CountedListWriter::<ValueType, _>(
 			data.len(),
@@ -363,13 +390,46 @@ impl Serialize for FunctionType {
 	}
 }
 
-
 /// Structure type.
 #[derive(Clone, Copy, Debug, PartialEq, Hash, Eq)]
 pub enum StorageType {
 	Value(ValueType),
 	PackedI8,
 	PackedI16,
+}
+
+impl Deserialize for StorageType {
+	type Error = Error;
+
+	fn deserialize<R: io::Read>(reader: &mut R) -> Result<Self, Self::Error> {
+		let val: i8 = VarInt7::deserialize(reader)?.into();
+		match val {
+			PACKEDI8TYPE => Some(StorageType::PackedI8),
+			PACKEDI16TYPE => Some(StorageType::PackedI16),
+			_ => match ValueType::from_bits(val) {
+				Some(mut item) => {
+					item.read_rest(reader)?;
+					Some(StorageType::Value(item))
+				},
+				None => None,
+			},
+		}.ok_or(Error::UnknownValueType(val))
+	}
+}
+
+impl Serialize for StorageType {
+	type Error = Error;
+
+	fn serialize<W: io::Write>(self, writer: &mut W) -> Result<(), Self::Error> {
+		match self {
+			StorageType::PackedI8 => VarInt7::from(PACKEDI8TYPE).serialize(writer),
+			StorageType::PackedI16 => VarInt7::from(PACKEDI16TYPE).serialize(writer),
+			StorageType::Value(val) => {
+				VarInt7::from(val.to_bits()).serialize(writer)?;
+				val.write_rest(writer)
+			},
+		}
+	}
 }
 
 /// Field type.
@@ -379,14 +439,76 @@ pub struct FieldType {
 	mutable: bool,
 }
 
+impl Deserialize for FieldType {
+	type Error = Error;
+
+	fn deserialize<R: io::Read>(reader: &mut R) -> Result<Self, Self::Error> {
+		let mutable = VarUint1::deserialize(reader)?.into();
+		Ok(FieldType {
+			elem: StorageType::deserialize(reader)?,
+			mutable,
+		})
+	}
+}
+
+impl Serialize for FieldType {
+	type Error = Error;
+
+	fn serialize<W: io::Write>(self, writer: &mut W) -> Result<(), Self::Error> {
+		VarUint1::from(self.mutable).serialize(writer)?;
+		self.elem.serialize(writer)?;
+		Ok(())
+	}
+}
+
 /// Structure type.
 #[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub struct StructType {
 	fields: Vec<FieldType>,
 }
 
+impl Deserialize for StructType {
+	type Error = Error;
+
+	fn deserialize<R: io::Read>(reader: &mut R) -> Result<Self, Self::Error> {
+		let fields: Vec<FieldType> = CountedList::deserialize(reader)?.into_inner();
+		Ok(StructType {
+			fields,
+		})
+	}
+}
+
+impl Serialize for StructType {
+	type Error = Error;
+
+	fn serialize<W: io::Write>(self, writer: &mut W) -> Result<(), Self::Error> {
+		CountedListWriter::<FieldType, _>(
+			self.fields.len(),
+			self.fields.into_iter(),
+		).serialize(writer)
+	}
+}
+
 /// Array type.
 #[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub struct ArrayType {
-	element: FieldType,
+	elem: FieldType,
+}
+
+impl Deserialize for ArrayType {
+	type Error = Error;
+
+	fn deserialize<R: io::Read>(reader: &mut R) -> Result<Self, Self::Error> {
+		Ok(ArrayType {
+			elem: FieldType::deserialize(reader)?,
+		})
+	}
+}
+
+impl Serialize for ArrayType {
+	type Error = Error;
+
+	fn serialize<W: io::Write>(self, writer: &mut W) -> Result<(), Self::Error> {
+		self.elem.serialize(writer)
+	}
 }

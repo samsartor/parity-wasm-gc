@@ -947,7 +947,8 @@ mod tests {
 			deserialize_buffer(types_test_payload()).expect("type_section be deserialized");
 
 		let t1 = match &type_section.types()[1] {
-			&Type::Function(ref func_type) => func_type
+			&Type::Function(ref func_type) => func_type,
+			_ => panic!("type is not a function"),
 		};
 
 		assert_eq!(Some(NumType::I64.into()), t1.return_type());

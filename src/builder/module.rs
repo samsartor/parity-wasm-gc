@@ -235,18 +235,20 @@ impl<F> ModuleBuilder<F> where F: Invoke<elements::Module> {
 	fn resolve_type_ref(&mut self, signature: code::Signature) -> u32 {
 		match signature {
 			code::Signature::Inline(func_type) => {
-				if let Some(existing_entry) = self.module.types.types().iter().enumerate().find(|(_idx, t)| {
-					let elements::Type::Function(ref existing) = t;
-					*existing == func_type
-				}) {
+				let func = elements::Type::Function(func_type);
+				if let Some(existing_entry) = self.module.types.types()
+					.iter()
+					.enumerate()
+					.find(|(_idx, t)| *t == &func) 
+				{
 					return existing_entry.0 as u32
-				}
-				self.module.types.types_mut().push(elements::Type::Function(func_type));
+				};
+				self.module.types.types_mut().push(func);
 				self.module.types.types().len() as u32 - 1
-			}
+			},
 			code::Signature::TypeReference(type_ref) => {
 				type_ref
-			}
+			},
 		}
 	}
 

@@ -195,7 +195,10 @@ impl LocalNameSection {
 			.map(|ts|
 				ts.types()
 					.iter()
-					.map(|x| { let Type::Function(ref func) = *x; func.params().len() })
+					.filter_map(|x| match x {
+						Type::Function(func) => Some(func.params().len()),
+						_ => None,
+					})
 					.max()
 					.unwrap_or(0))
 			.unwrap_or(0);

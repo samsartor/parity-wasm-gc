@@ -8,7 +8,7 @@ use std::env::args;
 use parity_wasm::elements::{Internal, External, Type, FunctionType, Module};
 
 // Auxillary function to resolve function type (signature) given it's callable index
-fn type_by_index(module: &Module, index: usize) -> FunctionType {
+fn type_by_index(module: &Module, index: usize) -> Option<FunctionType> {
 
 	// Demand that function and type section exist. Otherwise, fail with a
 	// corresponding error.
@@ -37,7 +37,8 @@ fn type_by_index(module: &Module, index: usize) -> FunctionType {
 
 	// Finally, return function type (signature)
 	match type_section.types()[func_type_ref] {
-		Type::Function(ref func_type) => func_type.clone(),
+		Type::Function(ref func_type) => Some(func_type.clone()),
+		_ => None,
 	}
 }
 
@@ -74,7 +75,11 @@ fn main() {
 			})
 		// Another map to resolve function signature index given it's internal index and return
 		// the printable string of the export
-		.map(|(field, index)| format!("{:}: {:?}", field, type_by_index(&module, index).params())).collect();
+		.filter_map(|(field, index)| Some(format!(
+			"{:}: {:?}",
+			field,
+			type_by_index(&module, index)?.params(),
+		))).collect();
 
 	// Print the result
 	for export in exports {
