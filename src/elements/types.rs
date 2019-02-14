@@ -10,12 +10,17 @@ use super::{
 pub enum Type {
 	/// Function type.
 	Function(FunctionType),
+	/// Structure type.
+	Struct(StructType),
+	/// ArrayType.
+	Array(ArrayType),
 }
 
 impl Deserialize for Type {
 	type Error = Error;
 
 	fn deserialize<R: io::Read>(reader: &mut R) -> Result<Self, Self::Error> {
+		// TODO: struct, array
 		Ok(Type::Function(FunctionType::deserialize(reader)?))
 	}
 }
@@ -25,7 +30,9 @@ impl Serialize for Type {
 
 	fn serialize<W: io::Write>(self, writer: &mut W) -> Result<(), Self::Error> {
 		match self {
-			Type::Function(fn_type) => fn_type.serialize(writer)
+			Type::Function(fn_type) => fn_type.serialize(writer),
+			Type::Struct(_) => unimplemented!(),
+			Type::Array(_) => unimplemented!(),
 		}
 	}
 }
@@ -70,6 +77,20 @@ impl ValueType {
 			ValueType::Ref(r) => r.to_bits(),
 		}
 	}
+
+	fn read_rest(&mut self, reader: &mut impl io::Read) -> Result<(), Error> {
+		match self {
+			ValueType::Ref(r) => r.read_rest(reader),
+			_ => Ok(()),
+		}
+	}
+
+	fn write_rest(&self, writer: &mut impl io::Write) -> Result<(), Error> {
+		match self {
+			ValueType::Ref(r) => r.write_rest(writer),
+			_ => Ok(()),
+		}
+	}
 }
 
 /// Reference type.
@@ -79,6 +100,8 @@ pub enum RefType {
 	AnyRef,
 	/// Infinite union of all references to functions
 	AnyFunc,
+	/// Reference to a specific definition
+	Ref(u32),
 }
 
 impl RefType {
@@ -86,6 +109,7 @@ impl RefType {
 		match x {
 			-0x10 => Some(RefType::AnyFunc),
 			-0x11 => Some(RefType::AnyRef),
+			-0x12 => Some(RefType::Ref(0)),
 			_ => None,
 		}
 	}
@@ -94,6 +118,22 @@ impl RefType {
 		match self {
 			RefType::AnyFunc => -0x10,
 			RefType::AnyRef => -0x11,
+			RefType::Ref(_) => -0x12,
+		}
+	}
+
+	fn read_rest(&mut self, reader: &mut impl io::Read) -> Result<(), Error> {
+		match self {
+			RefType::Ref(i) => *i = VarUint32::deserialize(reader)?.into(),
+			_ => (),
+		};
+		Ok(())
+	}
+
+	fn write_rest(&self, writer: &mut impl io::Write) -> Result<(), Error> {
+		match self {
+			RefType::Ref(i) => VarUint32::from(*i).serialize(writer),
+			_ => Ok(()),
 		}
 	}
 }
@@ -103,8 +143,10 @@ impl Deserialize for RefType {
 
 	fn deserialize<R: io::Read>(reader: &mut R) -> Result<Self, Self::Error> {
 		let val = VarInt7::deserialize(reader)?;
-		RefType::from_bits(val.into())
-			.ok_or(Error::UnknownValueType(val.into()))
+		let item = RefType::from_bits(val.into())
+			.ok_or(Error::UnknownValueType(val.into()))?;
+		item.read_rest(reader);
+		Ok(item)
 	}
 }
 
@@ -114,6 +156,7 @@ impl Serialize for RefType {
 	fn serialize<W: io::Write>(self, writer: &mut W) -> Result<(), Self::Error> {
 		let val: VarInt7 = self.to_bits().into();
 		val.serialize(writer)?;
+		self.write_rest(writer)?;
 		Ok(())
 	}
 }
@@ -157,8 +200,10 @@ impl Deserialize for ValueType {
 
 	fn deserialize<R: io::Read>(reader: &mut R) -> Result<Self, Self::Error> {
 		let val = VarInt7::deserialize(reader)?;
-		ValueType::from_bits(val.into())
-			.ok_or(Error::UnknownValueType(val.into()))
+		let item = ValueType::from_bits(val.into())
+			.ok_or(Error::UnknownValueType(val.into()))?;
+		item.read_rest(reader)?;
+		Ok(item)
 	}
 }
 
@@ -168,6 +213,7 @@ impl Serialize for ValueType {
 	fn serialize<W: io::Write>(self, writer: &mut W) -> Result<(), Self::Error> {
 		let val: VarInt7 = self.to_bits().into();
 		val.serialize(writer)?;
+		self.write_rest(writer)?;
 		Ok(())
 	}
 }
@@ -181,6 +227,7 @@ impl fmt::Display for ValueType {
 			ValueType::Num(NumType::F64) => write!(f, "f64"),
 			ValueType::Ref(RefType::AnyRef) => write!(f, "anyref"),
 			ValueType::Ref(RefType::AnyFunc) => write!(f, "anyfunc"),
+			ValueType::Ref(RefType::Ref(idx)) => write!(f, "(ref {})", idx),
 			ValueType::V128 => write!(f, "v128"),
 		}
 	}
@@ -316,3 +363,30 @@ impl Serialize for FunctionType {
 	}
 }
 
+
+/// Structure type.
+#[derive(Clone, Copy, Debug, PartialEq, Hash, Eq)]
+pub enum StorageType {
+	Value(ValueType),
+	PackedI8,
+	PackedI16,
+}
+
+/// Field type.
+#[derive(Debug, Clone, PartialEq, Hash, Eq)]
+pub struct FieldType {
+	elem: StorageType,
+	mutable: bool,
+}
+
+/// Structure type.
+#[derive(Debug, Clone, PartialEq, Hash, Eq)]
+pub struct StructType {
+	fields: Vec<FieldType>,
+}
+
+/// Array type.
+#[derive(Debug, Clone, PartialEq, Hash, Eq)]
+pub struct ArrayType {
+	element: FieldType,
+}
